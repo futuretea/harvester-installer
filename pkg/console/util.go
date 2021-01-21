@@ -17,7 +17,6 @@ import (
 	"github.com/jroimartin/gocui"
 	cfg "github.com/rancher/harvester-installer/pkg/config"
 	"github.com/rancher/k3os/pkg/config"
-	"k8s.io/apimachinery/pkg/util/rand"
 )
 
 func getSSHKeysFromURL(url string) ([]string, error) {
@@ -91,7 +90,7 @@ func customizeConfig() {
 	cfg.Config.K3OS.DNSNameservers = []string{"8.8.8.8"}
 	cfg.Config.K3OS.NTPServers = []string{"ntp.ubuntu.com"}
 	cfg.Config.K3OS.Modules = []string{"kvm", "vhost_net"}
-	cfg.Config.Hostname = "harvester-" + rand.String(5)
+	//cfg.Config.Hostname = "harvester-" + rand.String(5)
 
 	if cfg.Config.SSHKeyURL != "" {
 		cfg.Config.Runcmd = append(cfg.Config.Runcmd, fmt.Sprintf(`keys=$(curl -sfL --connect-timeout 30 %q) && echo "$keys">>%s`, cfg.Config.SSHKeyURL, authorizedFile))
@@ -127,7 +126,6 @@ func customizeConfig() {
 	cfg.Config.K3OS.Labels["svccontroller.k3s.cattle.io/enablelb"] = "true"
 	cfg.Config.K3OS.K3sArgs = append([]string{
 		"server",
-		"--cluster-init",
 		"--disable",
 		"local-storage",
 	}, cfg.Config.ExtraK3sArgs...)
