@@ -2,6 +2,8 @@ FROM golang:1.13.4-alpine3.10
 
 ARG DAPPER_HOST_ARCH
 ENV ARCH $DAPPER_HOST_ARCH
+ENV http_proxy=http://host.docker.internal:12333
+ENV https_proxy=http://host.docker.internal:12333
 
 RUN apk -U add bash git gcc musl-dev docker vim less file curl wget ca-certificates zstd
 RUN apk add yq --repository=http://dl-cdn.alpinelinux.org/alpine/edge/community
