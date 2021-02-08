@@ -9,7 +9,6 @@ echo "Start building ISO"
 
 K3S_VERSION=v1.19.5+k3s2
 K3S_IMAGE_URL=https://raw.githubusercontent.com/rancher/k3s/${K3S_VERSION}/scripts/airgap/image-list.txt
-OFFLINE_BUILD="1"
 
 # Prepare Harvester chart
 mkdir -p k3os/images/70-iso/charts
@@ -54,7 +53,7 @@ curl ${longhorn_image_url}>>${image_list_file}
 curl ${K3S_IMAGE_URL}>>${image_list_file}
 
 output_image_tar_file="k3os/images/70-iso/harvester-images.tar"
-if [ -n "${OFFLINE_BUILD}" ] && [ ! -f $output_image_tar_file.zst ]; then
+if [ -z "${HARVESTER_INSTALLER_OFFLINE_BUILD}" ] && [ ! -f $output_image_tar_file.zst ]; then
   images=$(cat "${image_list_file}")
   xargs -n1 docker pull <<< "${images}"
   docker save ${images} -o ${output_image_tar_file}
