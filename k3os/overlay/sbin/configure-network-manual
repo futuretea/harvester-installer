@@ -1,0 +1,40 @@
+#!/usr/bin/env bash
+set -euf -o pipefail
+
+function usage()
+{
+    cat <<HELP
+USAGE:
+    configure-network-manual INTERFACE IP NETMASK GATEWAY NAMESERVERS
+HELP
+}
+
+if [ $# -lt 5 ]; then
+    usage
+    exit 1
+fi
+
+INTERFACE=$1
+IP=$2
+NETMASK=$3
+GATEWAY=$4
+shift 4
+NAMESERVERS=$*
+
+function write_log()
+{
+    local message="${1}"
+    logger -t "run-cmd" "${message}"
+    echo "${message}"
+}
+
+function configure_network()
+{
+    local service
+    service=$(connmanctl services | awk '{ print $3 }' | while read -r s; do if connmanctl services "${s}" | grep -q "${INTERFACE}"; then echo "${s}"; fi; done)
+    test -n "${service}"
+    write_log "Config ipv4 manual ${INTERFACE}(${service}): address ${IP} mask ${NETMASK} gw ${GATEWAY} nameservers ${NAMESERVERS}"
+    connmanctl config "${service}" --ipv4 manual "${IP}" "${NETMASK}" "${GATEWAY}" --nameservers ${NAMESERVERS}
+}
+
+configure_network
