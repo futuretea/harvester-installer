@@ -6,6 +6,7 @@ import (
 	"crypto/tls"
 	"fmt"
 	"io/ioutil"
+	"net"
 	"net/http"
 	"os"
 	"os/exec"
@@ -17,10 +18,10 @@ import (
 	"github.com/imdario/mergo"
 	"github.com/jroimartin/gocui"
 	"github.com/pkg/errors"
-	cfg "github.com/rancher/harvester-installer/pkg/config"
 	"github.com/rancher/k3os/pkg/config"
 	"golang.org/x/crypto/ssh"
-	"k8s.io/apimachinery/pkg/util/rand"
+
+	cfg "github.com/rancher/harvester-installer/pkg/config"
 )
 
 const (
@@ -133,12 +134,17 @@ func showNext(c *Console, names ...string) error {
 	return nil
 }
 
+func validateIP(addr string) error {
+	if ip := net.ParseIP(addr); ip == nil || ip.To4() == nil {
+		return fmt.Errorf("%s is not a valid IP address", addr)
+	}
+	return nil
+}
+
 func customizeConfig() {
-	//common configs for both server and agent
-	cfg.Config.K3OS.DNSNameservers = []string{"8.8.8.8"}
+	// common configs for both server and agent
 	cfg.Config.K3OS.NTPServers = []string{"ntp.ubuntu.com"}
 	cfg.Config.K3OS.Modules = []string{"kvm", "vhost_net"}
-	cfg.Config.Hostname = "harvester-" + rand.String(5)
 
 	cfg.Config.K3OS.Labels = map[string]string{
 		"harvester.cattle.io/managed": "true",

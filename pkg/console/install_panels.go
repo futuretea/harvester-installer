@@ -8,15 +8,40 @@ import (
 	"sync"
 
 	"github.com/jroimartin/gocui"
+	"github.com/rancher/k3os/pkg/config"
+	"github.com/sirupsen/logrus"
+	"github.com/vishvananda/netlink"
+	"github.com/vishvananda/netlink/nl"
+	"k8s.io/apimachinery/pkg/util/rand"
+	"k8s.io/apimachinery/pkg/util/validation"
+
 	cfg "github.com/rancher/harvester-installer/pkg/config"
 	"github.com/rancher/harvester-installer/pkg/util"
 	"github.com/rancher/harvester-installer/pkg/widgets"
-	"github.com/rancher/k3os/pkg/config"
-	"github.com/sirupsen/logrus"
 )
 
+type InstallData struct {
+	InstallMode string
+	Device      string
+	ServerURL   string
+	Token       string
+	Password    string
+	SSHKeyURL   string
+	Interface   string
+	NetworkMode string
+	HostName    string
+	Address     string
+	IP          string
+	NetMask     string
+	Gateway     string
+	DNSServers  string
+	Proxy       string
+	ConfigURL   string
+}
+
 var (
-	once sync.Once
+	once        sync.Once
+	installData = InstallData{}
 )
 
 func (c *Console) layoutInstall(g *gocui.Gui) error {
@@ -56,6 +81,7 @@ func setPanels(c *Console) error {
 		addPasswordPanels,
 		addSSHKeyPanel,
 		addNetworkPanel,
+		addNetworkOptionPanel,
 		addTokenPanel,
 		addProxyPanel,
 		addCloudInitPanel,
@@ -120,6 +146,7 @@ func addDiskPanel(c *Console) error {
 			if err != nil {
 				return err
 			}
+			installData.Device = device
 			cfg.Config.K3OS.Install = &config.Install{
 				Device: device,
 			}
@@ -135,6 +162,7 @@ func addDiskPanel(c *Console) error {
 		},
 	}
 	diskV.PreShow = func() error {
+		diskV.DefaultValue = installData.Device
 		return c.setContentByName(titlePanel, "Choose installation target. Device will be formatted")
 	}
 	c.AddElement(diskPanel, diskV)
@@ -182,6 +210,7 @@ func addAskCreatePanel(c *Console) error {
 		if err := c.setContentByName(footerPanel, ""); err != nil {
 			return err
 		}
+		askCreateV.DefaultValue = installData.InstallMode
 		return c.setContentByName(titlePanel, "Choose installation mode")
 	}
 	askCreateV.PostClose = func() error {
@@ -194,11 +223,8 @@ func addAskCreatePanel(c *Console) error {
 				return err
 			}
 			askCreateV.Close()
-			if selected == modeCreate {
-				cfg.Config.InstallMode = modeCreate
-			} else {
-				cfg.Config.InstallMode = modeJoin
-			}
+			cfg.Config.InstallMode = selected
+			installData.InstallMode = selected
 			return showNext(c, diskPanel)
 		},
 	}
@@ -213,6 +239,7 @@ func addServerURLPanel(c *Console) error {
 	}
 	serverURLV.PreShow = func() error {
 		c.Gui.Cursor = true
+		serverURLV.DefaultValue = installData.ServerURL
 		if err := c.setContentByName(titlePanel, "Configure management address"); err != nil {
 			return err
 		}
@@ -251,6 +278,7 @@ func addServerURLPanel(c *Console) error {
 				}
 				spinner.Stop(false, "")
 				cfg.Config.K3OS.ServerURL = fmtServerURL
+				installData.ServerURL = serverURL
 				g.Update(func(g *gocui.Gui) error {
 					return showNext(c, tokenPanel)
 				})
@@ -285,6 +313,11 @@ func addPasswordPanels(c *Console) error {
 		return err
 	}
 
+	passwordV.PreShow = func() error {
+		passwordV.DefaultValue = installData.Password
+		return nil
+	}
+
 	passwordV.KeyBindings = map[gocui.Key]func(*gocui.Gui, *gocui.View) error{
 		gocui.KeyEnter: func(g *gocui.Gui, v *gocui.View) error {
 			return showNext(c, passwordConfirmPanel)
@@ -306,6 +339,7 @@ func addPasswordPanels(c *Console) error {
 
 	passwordConfirmV.PreShow = func() error {
 		c.Gui.Cursor = true
+		passwordConfirmV.DefaultValue = installData.Password
 		c.setContentByName(notePanel, "")
 		return c.setContentByName(titlePanel, "Configure the password to access the node")
 	}
@@ -334,6 +368,7 @@ func addPasswordPanels(c *Console) error {
 			}
 			password1V.Close()
 			passwordConfirmV.Close()
+			installData.Password = password1
 			encrpyted, err := util.GetEncrptedPasswd(password1)
 			if err != nil {
 				return err
@@ -363,6 +398,7 @@ func addSSHKeyPanel(c *Console) error {
 	}
 	sshKeyV.PreShow = func() error {
 		c.Gui.Cursor = true
+		sshKeyV.DefaultValue = installData.SSHKeyURL
 		if err := c.setContentByName(titlePanel, "Optional: import SSH keys"); err != nil {
 			return err
 		}
@@ -399,6 +435,7 @@ func addSSHKeyPanel(c *Console) error {
 					spinner.Stop(false, "")
 					logrus.Debug("SSH public keys: ", pubKeys)
 					cfg.Config.SSHAuthorizedKeys = pubKeys
+					installData.SSHKeyURL = url
 					g.Update(func(g *gocui.Gui) error {
 						sshKeyV.Close()
 						return showNext(c, networkPanel)
@@ -435,6 +472,7 @@ func addTokenPanel(c *Console) error {
 	}
 	tokenV.PreShow = func() error {
 		c.Gui.Cursor = true
+		tokenV.DefaultValue = installData.Token
 		if cfg.Config.InstallMode == modeCreate {
 			if err := c.setContentByName(notePanel, clusterTokenNote); err != nil {
 				return err
@@ -452,6 +490,7 @@ func addTokenPanel(c *Console) error {
 				return c.setContentByName(validatorPanel, "Cluster token is required")
 			}
 			cfg.Config.K3OS.Token = token
+			installData.Token = token
 			tokenV.Close()
 			return showNext(c, passwordConfirmPanel, passwordPanel)
 		},
@@ -475,19 +514,28 @@ func addNetworkPanel(c *Console) error {
 	}
 	networkV.PreShow = func() error {
 		c.Gui.Cursor = false
+		networkV.DefaultValue = installData.Interface
 		return c.setContentByName(titlePanel, "Select interface for the management network")
 	}
 	networkV.KeyBindings = map[gocui.Key]func(*gocui.Gui, *gocui.View) error{
 		gocui.KeyEnter: func(g *gocui.Gui, v *gocui.View) error {
-			iface, err := networkV.GetData()
+			selected, err := networkV.GetData()
 			if err != nil {
 				return err
 			}
-			if iface != "" {
-				cfg.Config.ExtraK3sArgs = append(cfg.Config.ExtraK3sArgs, "--flannel-iface", iface)
+			selectedData := strings.Split(selected, ";")
+			if len(selectedData) != 2 {
+				return fmt.Errorf("failed to parser network view selected data: %s", selected)
 			}
+			installData.Interface, installData.Address = selectedData[0], selectedData[1]
 			networkV.Close()
-			return showNext(c, proxyPanel)
+			if installData.Interface != "" {
+				cfg.Config.ExtraK3sArgs = []string{"--flannel-iface", installData.Interface}
+			}
+			if installData.NetworkMode != networkModeStatic {
+				return showNext(c, askNetworkModePanel, hostNamePanel)
+			}
+			return showNext(c, askNetworkModePanel, dnsServersPanel, gatewayPanel, addressPanel, hostNamePanel)
 		},
 		gocui.KeyEsc: func(g *gocui.Gui, v *gocui.View) error {
 			networkV.Close()
@@ -495,6 +543,350 @@ func addNetworkPanel(c *Console) error {
 		},
 	}
 	c.AddElement(networkPanel, networkV)
+	return nil
+}
+
+func addNetworkOptionPanel(c *Console) error {
+	maxX, maxY := c.Gui.Size()
+	lastY := maxY / 4
+	setLocation := func(p *widgets.Panel, high int) {
+		var (
+			x0 = maxX / 4
+			y0 = lastY
+			x1 = maxX / 4 * 3
+			y1 = y0 + high
+		)
+		lastY += high
+		p.SetLocation(x0, y0, x1, y1)
+	}
+
+	askOptionsFunc := func() ([]widgets.Option, error) {
+		return []widgets.Option{
+			{
+				Value: networkModeDHCP,
+				Text:  networkModeDHCP,
+			}, {
+				Value: networkModeStatic,
+				Text:  networkModeStatic,
+			},
+		}, nil
+	}
+	askNetModeV, err := widgets.NewSelect(c.Gui, askNetworkModePanel, "", askOptionsFunc)
+	if err != nil {
+		return err
+	}
+
+	hostNameV, err := widgets.NewInput(c.Gui, hostNamePanel, "HostName", false)
+	if err != nil {
+		return err
+	}
+
+	addressV, err := widgets.NewInput(c.Gui, addressPanel, "IPv4 Address", false)
+	if err != nil {
+		return err
+	}
+
+	gatewayV, err := widgets.NewInput(c.Gui, gatewayPanel, "Gateway", false)
+	if err != nil {
+		return err
+	}
+
+	dnsServersV, err := widgets.NewInput(c.Gui, dnsServersPanel, "DNS Servers", false)
+	if err != nil {
+		return err
+	}
+
+	validatorV := widgets.NewPanel(c.Gui, networkValidatorPanel)
+
+	closeAll := func() {
+		askNetModeV.Close()
+		hostNameV.Close()
+		addressV.Close()
+		gatewayV.Close()
+		dnsServersV.Close()
+		validatorV.Close()
+	}
+	goBack := func(g *gocui.Gui, v *gocui.View) error {
+		closeAll()
+		return showNext(c, networkPanel)
+	}
+
+	// askNetModeV
+	askNetModeV.PreShow = func() error {
+		c.Gui.Cursor = false
+		askNetModeV.DefaultValue = installData.NetworkMode
+		return c.setContentByName(titlePanel, "Choose network mode")
+	}
+	askNetModeV.KeyBindings = map[gocui.Key]func(*gocui.Gui, *gocui.View) error{
+		gocui.KeyEnter: func(g *gocui.Gui, v *gocui.View) error {
+			selected, err := askNetModeV.GetData()
+			if err != nil {
+				return err
+			}
+			closeAll()
+			installData.NetworkMode = selected
+			if selected != networkModeStatic {
+				installData.Gateway = ""
+				installData.NetMask = ""
+				installData.DNSServers = ""
+				cfg.Config.K3OS.DNSNameservers = nil
+				cfg.Config.Runcmd = nil
+				return showNext(c, askNetworkModePanel, hostNamePanel)
+			}
+			link, err := netlink.LinkByName(installData.Interface)
+			if err != nil {
+				return err
+			}
+
+			routes, err := netlink.RouteList(link, nl.FAMILY_V4)
+			if err != nil {
+				return err
+			}
+			for _, route := range routes {
+				if route.Gw != nil {
+					installData.Gateway = route.Gw.To4().String()
+				}
+			}
+			return showNext(c, askNetworkModePanel, dnsServersPanel, gatewayPanel, addressPanel, hostNamePanel)
+		},
+		gocui.KeyEsc: goBack,
+	}
+	askNetModeV.PostClose = func() error {
+		if installData.NetworkMode == "" {
+			installData.NetworkMode = networkModeDHCP
+		}
+		return nil
+	}
+	setLocation(askNetModeV.Panel, 6)
+	c.AddElement(askNetworkModePanel, askNetModeV)
+
+	// hostNameV
+	hostNameV.PreShow = func() error {
+		c.Gui.Cursor = true
+		if installData.HostName != "" {
+			hostNameV.DefaultValue = installData.HostName
+		}
+		return c.setContentByName(titlePanel, "Configure HostName (FQDN)")
+	}
+	validateHostName := func() (string, error) {
+		hostName, err := hostNameV.GetData()
+		if err != nil {
+			return "", err
+		}
+		if errs := validation.IsQualifiedName(hostName); len(errs) > 0 {
+			return fmt.Sprintf("%s is not a valid hostname", hostName), nil
+		}
+		validatorV.Close()
+		cfg.Config.Hostname = hostName
+		installData.HostName = hostName
+		return "", nil
+	}
+	hostNameV.KeyBindings = map[gocui.Key]func(*gocui.Gui, *gocui.View) error{
+		gocui.KeyArrowUp: func(g *gocui.Gui, v *gocui.View) error {
+			validateErrMsg, err := validateHostName()
+			if err != nil {
+				return err
+			}
+			if validateErrMsg != "" {
+				return c.setContentByName(networkValidatorPanel, validateErrMsg)
+			}
+			askNetModeV.Close()
+			return showNext(c, askNetworkModePanel)
+		},
+		gocui.KeyArrowDown: func(g *gocui.Gui, v *gocui.View) error {
+			if installData.NetworkMode != networkModeStatic {
+				return nil
+			}
+
+			validateErrMsg, err := validateHostName()
+			if err != nil {
+				return err
+			}
+			if validateErrMsg != "" {
+				return c.setContentByName(networkValidatorPanel, validateErrMsg)
+			}
+
+			return showNext(c, addressPanel)
+		},
+		gocui.KeyEnter: func(g *gocui.Gui, v *gocui.View) error {
+			validateErrMsg, err := validateHostName()
+			if err != nil {
+				return err
+			}
+			if validateErrMsg != "" {
+				return c.setContentByName(networkValidatorPanel, validateErrMsg)
+			}
+
+			if installData.NetworkMode != networkModeStatic {
+				closeAll()
+				return showNext(c, proxyPanel)
+			}
+			return showNext(c, addressPanel)
+		},
+		gocui.KeyEsc: goBack,
+	}
+	hostNameV.DefaultValue = "harvester-" + rand.String(5)
+	setLocation(hostNameV.Panel, 3)
+	c.AddElement(hostNamePanel, hostNameV)
+
+	// AddressV
+	addressV.PreShow = func() error {
+		c.Gui.Cursor = true
+		addressV.DefaultValue = installData.Address
+		return c.setContentByName(titlePanel, "Configure IPv4 Address (CIDR)")
+	}
+	validateAddress := func() (string, error) {
+		address, err := addressV.GetData()
+		if err != nil {
+			return "", err
+		}
+		installData.Address = address
+		ip, ipNet, err := net.ParseCIDR(installData.Address)
+		if err != nil {
+			return err.Error(), nil
+		}
+		validatorV.Close()
+		mask := ipNet.Mask
+		installData.IP = ip.String()
+		installData.NetMask = fmt.Sprintf("%d.%d.%d.%d", mask[0], mask[1], mask[2], mask[3])
+		return "", nil
+	}
+	addressVConfirm := func(g *gocui.Gui, v *gocui.View) error {
+		validateErrMsg, err := validateAddress()
+		if err != nil {
+			return err
+		}
+		if validateErrMsg != "" {
+			return c.setContentByName(networkValidatorPanel, validateErrMsg)
+		}
+		return showNext(c, gatewayPanel)
+	}
+	addressV.KeyBindings = map[gocui.Key]func(*gocui.Gui, *gocui.View) error{
+		gocui.KeyArrowUp: func(g *gocui.Gui, v *gocui.View) error {
+			validateErrMsg, err := validateAddress()
+			if err != nil {
+				return err
+			}
+			if validateErrMsg != "" {
+				return c.setContentByName(networkValidatorPanel, validateErrMsg)
+			}
+			return showNext(c, hostNamePanel)
+		},
+		gocui.KeyArrowDown: addressVConfirm,
+		gocui.KeyEnter:     addressVConfirm,
+		gocui.KeyEsc:       goBack,
+	}
+	setLocation(addressV.Panel, 3)
+	c.AddElement(addressPanel, addressV)
+
+	// gatewayV
+	gatewayV.PreShow = func() error {
+		c.Gui.Cursor = true
+		gatewayV.DefaultValue = installData.Gateway
+		return c.setContentByName(titlePanel, "Configure Gateway")
+	}
+	validateGateway := func() (string, error) {
+		gateway, err := gatewayV.GetData()
+		if err != nil {
+			return "", err
+		}
+		if err = validateIP(gateway); err != nil {
+			return err.Error(), nil
+		}
+		validatorV.Close()
+		installData.Gateway = gateway
+		return "", nil
+	}
+	gatewayVConfirm := func(g *gocui.Gui, v *gocui.View) error {
+		validateErrMsg, err := validateGateway()
+		if err != nil {
+			return err
+		}
+		if validateErrMsg != "" {
+			return c.setContentByName(networkValidatorPanel, validateErrMsg)
+		}
+		return showNext(c, dnsServersPanel)
+	}
+	gatewayV.KeyBindings = map[gocui.Key]func(*gocui.Gui, *gocui.View) error{
+		gocui.KeyArrowUp: func(g *gocui.Gui, v *gocui.View) error {
+			validateErrMsg, err := validateGateway()
+			if err != nil {
+				return err
+			}
+			if validateErrMsg != "" {
+				return c.setContentByName(networkValidatorPanel, validateErrMsg)
+			}
+			return showNext(c, addressPanel)
+		},
+		gocui.KeyArrowDown: gatewayVConfirm,
+		gocui.KeyEnter:     gatewayVConfirm,
+		gocui.KeyEsc:       goBack,
+	}
+	setLocation(gatewayV.Panel, 3)
+	c.AddElement(gatewayPanel, gatewayV)
+
+	// dnsServersV
+	dnsServersV.PreShow = func() error {
+		c.Gui.Cursor = true
+		if installData.DNSServers != "" {
+			dnsServersV.DefaultValue = installData.DNSServers
+		}
+		return c.setContentByName(titlePanel, "Configure DNS Servers")
+	}
+	validateDNSServers := func() (string, error) {
+		dnsServers, err := dnsServersV.GetData()
+		if err != nil {
+			return "", err
+		}
+		dnsServerList := strings.Split(dnsServers, ",")
+		for _, dnsServer := range dnsServerList {
+			if err = validateIP(dnsServer); err != nil {
+				return err.Error(), nil
+			}
+		}
+		installData.DNSServers = dnsServers
+		cfg.Config.K3OS.DNSNameservers = dnsServerList
+
+		// run-cmd
+		configureNetworkManual := fmt.Sprintf("/sbin/configure-network-manual %s %s %s %s %s",
+			installData.Interface, installData.IP, installData.NetMask, installData.Gateway, strings.Join(dnsServerList, " "))
+		cfg.Config.Runcmd = []string{configureNetworkManual}
+		return "", nil
+	}
+	dnsServersV.KeyBindings = map[gocui.Key]func(*gocui.Gui, *gocui.View) error{
+		gocui.KeyArrowUp: func(g *gocui.Gui, v *gocui.View) error {
+			validateErrMsg, err := validateDNSServers()
+			if err != nil {
+				return err
+			}
+			if validateErrMsg != "" {
+				return c.setContentByName(networkValidatorPanel, validateErrMsg)
+			}
+			return showNext(c, gatewayPanel)
+		},
+		gocui.KeyEnter: func(g *gocui.Gui, v *gocui.View) error {
+			validateErrMsg, err := validateDNSServers()
+			if err != nil {
+				return err
+			}
+			if validateErrMsg != "" {
+				return c.setContentByName(networkValidatorPanel, validateErrMsg)
+			}
+			closeAll()
+			return showNext(c, proxyPanel)
+		},
+		gocui.KeyEsc: goBack,
+	}
+	setLocation(dnsServersV.Panel, 3)
+	dnsServersV.DefaultValue = "8.8.8.8"
+	c.AddElement(dnsServersPanel, dnsServersV)
+
+	// validatorV
+	validatorV.FgColor = gocui.ColorRed
+	validatorV.Focus = false
+	setLocation(validatorV, 3)
+	c.AddElement(networkValidatorPanel, validatorV)
+
 	return nil
 }
 
@@ -525,7 +917,9 @@ func getNetworkInterfaceOptions() ([]widgets.Option, error) {
 			Text:  i.Name,
 		}
 		if len(ips) > 0 {
-			option.Text = fmt.Sprintf("%s (%s)", i.Name, strings.Join(ips, ","))
+			allIP := strings.Join(ips, ",")
+			option.Value = fmt.Sprintf("%s;%s", i.Name, allIP)
+			option.Text = fmt.Sprintf("%s (%s)", i.Name, allIP)
 		}
 		options = append(options, option)
 	}
@@ -539,6 +933,7 @@ func addProxyPanel(c *Console) error {
 	}
 	proxyV.PreShow = func() error {
 		c.Gui.Cursor = true
+		proxyV.DefaultValue = installData.Proxy
 		if err := c.setContentByName(titlePanel, "Optional: configure proxy"); err != nil {
 			return err
 		}
@@ -556,6 +951,7 @@ func addProxyPanel(c *Console) error {
 				}
 				cfg.Config.K3OS.Environment["http_proxy"] = proxy
 				cfg.Config.K3OS.Environment["https_proxy"] = proxy
+				installData.Proxy = proxy
 			}
 			proxyV.Close()
 			noteV, err := c.GetElement(notePanel)
@@ -567,7 +963,15 @@ func addProxyPanel(c *Console) error {
 		},
 		gocui.KeyEsc: func(g *gocui.Gui, v *gocui.View) error {
 			proxyV.Close()
-			return showNext(c, networkPanel)
+			noteV, err := c.GetElement(notePanel)
+			if err != nil {
+				return err
+			}
+			noteV.Close()
+			if installData.NetworkMode != networkModeStatic {
+				return showNext(c, askNetworkModePanel, hostNamePanel)
+			}
+			return showNext(c, askNetworkModePanel, hostNamePanel, addressPanel, gatewayPanel, dnsServersPanel)
 		},
 	}
 	c.AddElement(proxyPanel, proxyV)
@@ -580,6 +984,7 @@ func addCloudInitPanel(c *Console) error {
 		return err
 	}
 	cloudInitV.PreShow = func() error {
+		cloudInitV.DefaultValue = installData.ConfigURL
 		return c.setContentByName(titlePanel, "Optional: configure cloud-init")
 	}
 	cloudInitV.KeyBindings = map[gocui.Key]func(*gocui.Gui, *gocui.View) error{
@@ -593,14 +998,29 @@ func addCloudInitPanel(c *Console) error {
 				return err
 			}
 			cfg.Config.K3OS.Install.ConfigURL = configURL
+			installData.ConfigURL = configURL
 			cloudInitV.Close()
 			installBytes, err := config.PrintInstall(cfg.Config.CloudConfig)
 			if err != nil {
 				return err
 			}
 			options := fmt.Sprintf("install mode: %v\n", cfg.Config.InstallMode)
+			if cfg.Config.InstallMode == modeJoin {
+				options += fmt.Sprintf("management address: %v\n", cfg.Config.K3OS.ServerURL)
+			}
 			if proxy, ok := cfg.Config.K3OS.Environment["http_proxy"]; ok {
 				options += fmt.Sprintf("proxy address: %v\n", proxy)
+			}
+			if installData.SSHKeyURL != "" {
+				options += fmt.Sprintf("ssh keys http url: %v\n", installData.SSHKeyURL)
+			}
+			options += fmt.Sprintf("management interface: %v\n", installData.Interface)
+			options += fmt.Sprintf("network mode: %v\n", installData.NetworkMode)
+			options += fmt.Sprintf("hostname: %v\n", cfg.Config.Hostname)
+			if installData.NetworkMode == networkModeStatic {
+				options += fmt.Sprintf("ipv4 address: %v\n", installData.Address)
+				options += fmt.Sprintf("gateway: %v\n", installData.Gateway)
+				options += fmt.Sprintf("dns servers: %v\n", installData.DNSServers)
 			}
 			options += string(installBytes)
 			logrus.Debug("cfm cfg: ", fmt.Sprintf("%+v", cfg.Config.K3OS.Install))

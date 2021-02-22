@@ -6,8 +6,8 @@ import (
 
 type Input struct {
 	*Panel
-
-	Mask bool
+	DefaultValue string
+	Mask         bool
 }
 
 func NewInput(g *gocui.Gui, name string, label string, mask bool) (*Input, error) {
@@ -61,6 +61,11 @@ func (i *Input) Show() error {
 	if _, err := i.g.SetCurrentView(inputViewName); err != nil {
 		return err
 	}
+	if i.DefaultValue != "" {
+		if err = i.SetData(i.DefaultValue); err != nil {
+			return err
+		}
+	}
 	return nil
 }
 
@@ -89,4 +94,15 @@ func (i *Input) GetData() (string, error) {
 		return "", nil
 	}
 	return ov.Line(0)
+}
+
+func (i *Input) SetData(data string) error {
+	inputViewName := i.Name + "-input"
+	ov, err := i.g.View(inputViewName)
+	if err != nil {
+		return err
+	}
+	ov.Clear()
+	_, err = ov.Write([]byte(data))
+	return err
 }
