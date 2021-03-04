@@ -14,6 +14,7 @@ import (
 	"github.com/jroimartin/gocui"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
+	"k8s.io/apimachinery/pkg/util/net"
 
 	"github.com/rancher/harvester-installer/pkg/util"
 	"github.com/rancher/harvester-installer/pkg/version"
@@ -26,6 +27,10 @@ const (
 	colorGreen
 	colorYellow
 	colorBlue
+
+	statusRunning   = "Running"
+	statusUnknown   = "Unknown"
+	statusSettingUp = "Setting up Harvester"
 
 	logo string = `
 ██╗░░██╗░█████╗░██████╗░██╗░░░██╗███████╗░██████╗████████╗███████╗██████╗░
@@ -208,7 +213,16 @@ func syncHarvesterURL(ctx context.Context, g *gocui.Gui) {
 }
 
 func doSyncHarvesterURL(g *gocui.Gui) {
-	harvesterURL := getHarvesterURL()
+	harvesterIP := getHarvesterIP()
+	if len(harvesterIP) == 0 {
+		ip, err := net.ChooseHostInterface()
+		if err != nil {
+			logrus.Error(err)
+			return
+		}
+		harvesterIP = ip.String()
+	}
+	harvesterURL := fmt.Sprintf("https://%s:%s", harvesterIP, harvesterNodePort)
 	g.Update(func(g *gocui.Gui) error {
 		v, err := g.View("url")
 		if err != nil {
@@ -220,7 +234,7 @@ func doSyncHarvesterURL(g *gocui.Gui) {
 	})
 }
 
-func getHarvesterURL() string {
+func getHarvesterIP() string {
 	// get first ready master node's internal ip
 	cmd := exec.Command("/bin/sh", "-c", `kubectl get no -l 'node-role.kubernetes.io/master=true' --sort-by='.metadata.creationTimestamp' \
 -o jsonpath='{range .items[*]}{@.metadata.name}:{range @.status.conditions[*]}{@.type}={@.status};{end}{range @.status.addresses[*]}{@.type}={@.address};{end}{"\n"}{end}' 2>/dev/null \
@@ -230,14 +244,10 @@ func getHarvesterURL() string {
 	outStr := string(output)
 	if err != nil {
 		logrus.Error(err, outStr)
-		return "Unavailable"
+		return ""
 	}
 
-	if len(outStr) == 0 {
-		return "Unavailable"
-	}
-
-	return fmt.Sprintf("https://%s:%s", outStr, harvesterNodePort)
+	return outStr
 }
 
 func syncHarvesterStatus(ctx context.Context, g *gocui.Gui) {
@@ -311,7 +321,11 @@ func harvesterPodStatus() (string, error) {
 	if err != nil {
 		return "", errors.Wrap(err, string(output))
 	}
-	return string(output), nil
+	outStr := string(output)
+	if strings.Contains(outStr, statusRunning) {
+		return statusRunning, nil
+	}
+	return outStr, nil
 }
 
 func nodeIsPresent() bool {
@@ -336,20 +350,20 @@ func nodeIsPresent() bool {
 func getHarvesterStatus() string {
 	if current.firstHost && !current.installed {
 		if !k8sIsReady() || !chartIsInstalled() {
-			return "Setting up Harvester"
+			return statusSettingUp
 		}
 		current.installed = true
 	}
 
 	if !nodeIsPresent() {
-		return wrapColor("Unknown", colorYellow)
+		return wrapColor(statusUnknown, colorYellow)
 	}
 
 	status, err := harvesterPodStatus()
 	if err != nil {
 		status = wrapColor(err.Error(), colorRed)
 	}
-	if status == "Running" {
+	if status == statusRunning {
 		status = wrapColor(status, colorGreen)
 	} else {
 		status = wrapColor(status, colorYellow)
