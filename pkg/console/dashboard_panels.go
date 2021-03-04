@@ -67,7 +67,7 @@ func (c *Console) layoutDashboard(g *gocui.Gui) error {
 		}
 		v.Frame = false
 		v.Wrap = true
-		go syncHarvesterURL(context.Background(), g)
+		go syncManagementURL(context.Background(), g)
 	}
 	if v, err := g.SetView("status", maxX/2-40, 14, maxX/2+40, 18); err != nil {
 		if err != gocui.ErrUnknownView {
@@ -197,9 +197,9 @@ func initState() error {
 	return nil
 }
 
-func syncHarvesterURL(ctx context.Context, g *gocui.Gui) {
+func syncManagementURL(ctx context.Context, g *gocui.Gui) {
 	// sync url at the beginning
-	doSyncHarvesterURL(g)
+	doSyncManagementURL(g)
 
 	syncDuration := 5 * time.Second
 	ticker := time.NewTicker(syncDuration)
@@ -208,33 +208,34 @@ func syncHarvesterURL(ctx context.Context, g *gocui.Gui) {
 		ticker.Stop()
 	}()
 	for range ticker.C {
-		doSyncHarvesterURL(g)
+		doSyncManagementURL(g)
 	}
 }
 
-func doSyncHarvesterURL(g *gocui.Gui) {
-	harvesterIP := getHarvesterIP()
-	if len(harvesterIP) == 0 {
-		ip, err := net.ChooseHostInterface()
+func doSyncManagementURL(g *gocui.Gui) {
+	managementIP := getFirstReadyMasterIP()
+	if len(managementIP) == 0 {
+		managementNIC := getManagementNIC()
+		ip, err := net.ChooseBindAddressForInterface(managementNIC)
 		if err != nil {
 			logrus.Error(err)
 			return
 		}
-		harvesterIP = ip.String()
+		managementIP = ip.String()
 	}
-	harvesterURL := fmt.Sprintf("https://%s:%s", harvesterIP, harvesterNodePort)
+	managementURL := fmt.Sprintf("https://%s:%s", managementIP, harvesterNodePort)
 	g.Update(func(g *gocui.Gui) error {
 		v, err := g.View("url")
 		if err != nil {
 			return err
 		}
 		v.Clear()
-		fmt.Fprintf(v, "Harvester management URL: \n\n%s", harvesterURL)
+		fmt.Fprintf(v, "Harvester management URL: \n\n%s", managementURL)
 		return nil
 	})
 }
 
-func getHarvesterIP() string {
+func getFirstReadyMasterIP() string {
 	// get first ready master node's internal ip
 	cmd := exec.Command("/bin/sh", "-c", `kubectl get no -l 'node-role.kubernetes.io/master=true' --sort-by='.metadata.creationTimestamp' \
 -o jsonpath='{range .items[*]}{@.metadata.name}:{range @.status.conditions[*]}{@.type}={@.status};{end}{range @.status.addresses[*]}{@.type}={@.address};{end}{"\n"}{end}' 2>/dev/null \
@@ -246,7 +247,18 @@ func getHarvesterIP() string {
 		logrus.Error(err, outStr)
 		return ""
 	}
+	return outStr
+}
 
+func getManagementNIC() string {
+	cmd := exec.Command("/bin/sh", "-c", `yq eval '.k3os.k3sArgs[]' /k3os/system/config.yaml | sed -n '/--flannel-iface/ {n;p}'`)
+	cmd.Env = os.Environ()
+	output, err := cmd.Output()
+	outStr := string(output)
+	if err != nil {
+		logrus.Error(err, outStr)
+		return ""
+	}
 	return outStr
 }
 
