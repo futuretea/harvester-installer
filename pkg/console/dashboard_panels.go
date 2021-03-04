@@ -251,7 +251,7 @@ func getFirstReadyMasterIP() string {
 }
 
 func getManagementNIC() string {
-	cmd := exec.Command("/bin/sh", "-c", `yq eval '.k3os.k3sArgs[]' /k3os/system/config.yaml | sed -n '/--flannel-iface/ {n;p}'`)
+	cmd := exec.Command("/bin/sh", "-c", `yq eval '.k3os.k3sArgs[]' /k3os/system/config.yaml | sed -n '/--flannel-iface/ {n;p}' | xargs echo -n`)
 	cmd.Env = os.Environ()
 	output, err := cmd.Output()
 	outStr := string(output)
