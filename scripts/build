@@ -65,7 +65,7 @@ if [ -z "${HARVESTER_INSTALLER_OFFLINE_BUILD}" ] && [ ! -f $output_image_tar_fil
     ctr images pull "${image}" > /dev/null 2>&1
   done
   echo "${images}" | xargs -r ctr images export ${output_image_tar_file}
-  zstd --rm ${output_image_tar_file} -o ${output_image_tar_file}.zst
+  zstd -18 --rm ${output_image_tar_file} -o ${output_image_tar_file}.zst
 fi
 
 # get harvester version
