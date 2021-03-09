@@ -235,7 +235,7 @@ func toCloudConfig(cfg *config.HarvesterConfig) *k3os.CloudConfig {
 
 	cloudConfig.K3OS.K3sArgs = append([]string{
 		"server",
-		"--cluster-init",
+		//"--cluster-init",
 		"--disable",
 		"local-storage",
 		"--disable",

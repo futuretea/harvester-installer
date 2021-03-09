@@ -27,7 +27,6 @@ k3os:
     https_proxy: http://myserver
   k3sArgs:
   - server
-  - --cluster-init
   - --disable
   - local-storage
   - --disable
