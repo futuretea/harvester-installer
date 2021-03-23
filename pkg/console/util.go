@@ -230,6 +230,9 @@ func toCloudConfig(cfg *config.HarvesterConfig) *k3os.CloudConfig {
 		}
 	}
 
+	cloudConfig.Bootcmd = append(cloudConfig.Bootcmd, "rc-update delete ccapply default")
+	cloudConfig.Bootcmd = append(cloudConfig.Bootcmd, "rc-update delete k3s-service default")
+
 	// k3os & k3s
 	cloudConfig.K3OS.Labels = map[string]string{
 		"harvesterhci.io/managed": "true",
