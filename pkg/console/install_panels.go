@@ -117,7 +117,7 @@ func setPanels(c *Console) error {
 func addTitlePanel(c *Console) error {
 	maxX, maxY := c.Gui.Size()
 	titleV := widgets.NewPanel(c.Gui, titlePanel)
-	titleV.SetLocation(maxX/4, maxY/4-3, maxX/4*3, maxY/4)
+	titleV.SetLocation(maxX/8, maxY/8-3, maxX/8*7, maxY/8)
 	titleV.Focus = false
 	c.AddElement(titlePanel, titleV)
 	return nil
@@ -126,7 +126,7 @@ func addTitlePanel(c *Console) error {
 func addValidatorPanel(c *Console) error {
 	maxX, maxY := c.Gui.Size()
 	validatorV := widgets.NewPanel(c.Gui, validatorPanel)
-	validatorV.SetLocation(maxX/4, maxY/4+5, maxX/4*3, maxY/4+7)
+	validatorV.SetLocation(maxX/8, maxY/8+5, maxX/8*7, maxY/8+7)
 	validatorV.FgColor = gocui.ColorRed
 	validatorV.Focus = false
 	c.AddElement(validatorPanel, validatorV)
@@ -136,7 +136,7 @@ func addValidatorPanel(c *Console) error {
 func addNotePanel(c *Console) error {
 	maxX, maxY := c.Gui.Size()
 	noteV := widgets.NewPanel(c.Gui, notePanel)
-	noteV.SetLocation(maxX/4, maxY/4+3, maxX, maxY/4+5)
+	noteV.SetLocation(maxX/8, maxY/8+3, maxX/8*7, maxY/8+5)
 	noteV.Wrap = true
 	noteV.Focus = false
 	c.AddElement(notePanel, noteV)
@@ -372,7 +372,7 @@ func addPasswordPanels(c *Console) error {
 			return showNext(c, tokenPanel)
 		},
 	}
-	passwordV.SetLocation(maxX/4, maxY/4, maxX/4*3, maxY/4+2)
+	passwordV.SetLocation(maxX/8, maxY/8, maxX/8*7, maxY/8+2)
 	c.AddElement(passwordPanel, passwordV)
 
 	passwordConfirmV.PreShow = func() error {
@@ -415,7 +415,7 @@ func addPasswordPanels(c *Console) error {
 			return showNext(c, tokenPanel)
 		},
 	}
-	passwordConfirmV.SetLocation(maxX/4, maxY/4+3, maxX/4*3, maxY/4+5)
+	passwordConfirmV.SetLocation(maxX/8, maxY/8+3, maxX/8*7, maxY/8+5)
 	c.AddElement(passwordConfirmPanel, passwordConfirmV)
 
 	return nil
@@ -557,12 +557,12 @@ func showNetworkPage(c *Console) error {
 
 func addNetworkPanel(c *Console) error {
 	maxX, maxY := c.Gui.Size()
-	lastY := maxY / 4
+	lastY := maxY / 8
 	setLocation := func(p *widgets.Panel, height int) {
 		var (
-			x0 = maxX / 4
+			x0 = maxX / 8
 			y0 = lastY
-			x1 = maxX / 4 * 3
+			x1 = maxX / 8 * 7
 			y1 = y0 + height
 		)
 		lastY += height
@@ -1205,7 +1205,7 @@ func addInstallPanel(c *Console) error {
 func addSpinnerPanel(c *Console) error {
 	maxX, maxY := c.Gui.Size()
 	asyncTaskV := widgets.NewPanel(c.Gui, spinnerPanel)
-	asyncTaskV.SetLocation(maxX/4, maxY/4+7, maxX/4*3, maxY/4+9)
+	asyncTaskV.SetLocation(maxX/8, maxY/8+7, maxX/8*7, maxY/8+9)
 	c.AddElement(spinnerPanel, asyncTaskV)
 	return nil
 }
