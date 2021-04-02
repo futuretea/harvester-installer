@@ -84,6 +84,7 @@ setup_services()
         case $what in
             kvm|qemu)
                 ln -s /etc/init.d/qemu-guest-agent /etc/runlevels/boot/
+                echo GA_PATH=/dev/vport0p1>/etc/conf.d/qemu-guest-agent
                 ;;
             microsoft|hyperv)
                 ln -s /etc/init.d/hv_kvp_daemon /etc/runlevels/boot/
