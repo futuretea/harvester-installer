@@ -1207,7 +1207,7 @@ func addInstallPanel(c *Console) error {
 func addSpinnerPanel(c *Console) error {
 	maxX, maxY := c.Gui.Size()
 	asyncTaskV := widgets.NewPanel(c.Gui, spinnerPanel)
-	asyncTaskV.SetLocation(maxX/8, maxY/8+7, maxX/8*7, maxY/8+9)
+	asyncTaskV.SetLocation(maxX/8, maxY/8+7, maxX/8*7, maxY/8+11)
 	asyncTaskV.Wrap = true
 	c.AddElement(spinnerPanel, asyncTaskV)
 	return nil
