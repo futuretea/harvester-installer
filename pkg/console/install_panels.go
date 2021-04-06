@@ -126,7 +126,7 @@ func addTitlePanel(c *Console) error {
 func addValidatorPanel(c *Console) error {
 	maxX, maxY := c.Gui.Size()
 	validatorV := widgets.NewPanel(c.Gui, validatorPanel)
-	validatorV.SetLocation(maxX/8, maxY/8+5, maxX/8*7, maxY/8+9)
+	validatorV.SetLocation(maxX/8, maxY/8+5, maxX/8*7, maxY/8*7)
 	validatorV.FgColor = gocui.ColorRed
 	validatorV.Wrap = true
 	validatorV.Focus = false
@@ -564,8 +564,13 @@ func addNetworkPanel(c *Console) error {
 			x0 = maxX / 8
 			y0 = lastY
 			x1 = maxX / 8 * 7
-			y1 = y0 + height
+			y1 = y0
 		)
+		if height == 0 {
+			y1 = maxY / 8 * 7
+		} else {
+			y1 += height
+		}
 		lastY += height
 		p.SetLocation(x0, y0, x1, y1)
 	}
@@ -867,7 +872,7 @@ func addNetworkPanel(c *Console) error {
 	networkValidatorV.FgColor = gocui.ColorRed
 	networkValidatorV.Wrap = true
 	networkValidatorV.Focus = false
-	setLocation(networkValidatorV, 6)
+	setLocation(networkValidatorV, 0)
 	c.AddElement(networkValidatorPanel, networkValidatorV)
 
 	return nil
@@ -1207,7 +1212,7 @@ func addInstallPanel(c *Console) error {
 func addSpinnerPanel(c *Console) error {
 	maxX, maxY := c.Gui.Size()
 	asyncTaskV := widgets.NewPanel(c.Gui, spinnerPanel)
-	asyncTaskV.SetLocation(maxX/8, maxY/8+7, maxX/8*7, maxY/8+11)
+	asyncTaskV.SetLocation(maxX/8, maxY/8+7, maxX/8*7, maxY/8*7)
 	asyncTaskV.Wrap = true
 	c.AddElement(spinnerPanel, asyncTaskV)
 	return nil
