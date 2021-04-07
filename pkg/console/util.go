@@ -35,7 +35,7 @@ func newProxyClient() http.Client {
 	return http.Client{
 		Timeout: defaultHTTPTimeout,
 		Transport: &http.Transport{
-			Proxy: proxyFromEnvironment,
+			Proxy: http.ProxyFromEnvironment,
 		},
 	}
 }
