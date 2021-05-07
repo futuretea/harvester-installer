@@ -10,6 +10,9 @@ write_files:
 hostname: myhost
 run_cmd:
 - rm -rf /dev/loop
+bootcmd:
+- rc-update delete ccapply default
+- rc-update delete k3s-service default
 k3os:
   modules:
   - kvm
